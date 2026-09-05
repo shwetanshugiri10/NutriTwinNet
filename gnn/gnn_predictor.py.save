@@ -1,0 +1,287 @@
+from torch_geometric.data import Data
+
+from .graph_builder import build_personalized_graph
+from .gcn_model import NutriTwinGCN
+
+
+MODEL_PATH = os.path.join(
+    os.path.dirname(__file__),
+    "nutritwin_gnn.pth"
+)
+
+FOOD_PATH = os.path.join(
+    os.path.dirname(__file__),
+    "..",
+    "data",
+    "foods.csv"
+)
+
+
+class NutriTwinGNNPredictor:
+
+    def __init__(self):
+
+        self.foods = pd.read_csv(
+            FOOD_PATH
+        )
+
+        checkpoint = torch.load(
+            MODEL_PATH,
+            map_location="cpu",
+            weights_only=False
+        )
+
+        self.model = NutriTwinGCN(
+            input_features=checkpoint[
+                "input_features"
+            ],
+            hidden_features=checkpoint[
+                "hidden_features"
+            ],
+            output_features=checkpoint[
+                "output_features"
+            ]
+        )
+
+        self.prediction_layer = torch.nn.Sequential(
+            torch.nn.Linear(16, 32),
+            torch.nn.ReLU(),
+            torch.nn.Linear(32, 1)
+        )
+
+        self.model.load_state_dict(
+            checkpoint["model_state_dict"]
+        )
+
+        self.prediction_layer.load_state_dict(
+            checkpoint[
+                "prediction_layer_state_dict"
+            ]
+        )
+
+        self.model.eval()
+        self.prediction_layer.eval()
+
+
+    def _create_features(self, nodes):
+
+        features = []
+
+        for node in nodes:
+
+            if node["type"] == "digital_twin":
+
+                features.append([
+                    1.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0
+                ])
+
+            elif node["type"] == "user_feature":
+
+                value = float(
+                    node["value"]
+                )
+
+                if node["name"] == "age":
+                    value /= 100
+
+                elif node["name"] == "weight":
+                    value /= 200
+
+                elif node["name"] == "height":
+                    value /= 250
+
+                elif node["name"] == "steps":
+                    value /= 20000
+
+                elif node["name"] == "heart_rate":
+                    value /= 200
+
+                elif node["name"] == "sleep_hours":
+                    value /= 12
+
+                elif node["name"] == "active_calories":
+                    value /= 2000
+
+                features.append([
+                    value,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0
+                ])
+
+            elif node["type"] == "food":
+
+                food = self.foods[
+                    self.foods["food"]
+                    == node["name"]
+                ].iloc[0]
+
+                features.append([
+                    float(food["calories"]) / 1000,
+                    float(food["protein"]) / 100,
+                    float(food["carbs"]) / 100,
+                    float(food["fat"]) / 100,
+                    float(food["fiber"]) / 50
+                ])
+
+            elif node["type"] == "nutrient":
+
+                nutrient_index = {
+                    "calories": 0,
+                    "protein": 1,
+                    "carbs": 2,
+                    "fat": 3,
+                    "fiber": 4
+                }
+
+                vector = [0.0] * 5
+
+                vector[
+                    nutrient_index[
+                        node["name"]
+                    ]
+                ] = 1.0
+
+                features.append(vector)
+
+        return torch.tensor(
+            features,
+            dtype=torch.float
+        )
+
+
+    def predict(
+        self,
+        age=22,
+        weight=65,
+        height=170,
+        steps=8000,
+        heart_rate=75,
+        sleep_hours=7.5,
+        active_calories=400,
+        top_k=5
+    ):
+
+        nodes, edges = build_personalized_graph(
+            age=age,
+            weight=weight,
+            height=height,
+            steps=steps,
+            heart_rate=heart_rate,
+            sleep_hours=sleep_hours,
+            active_calories=active_calories
+        )
+
+        x = self._create_features(
+            nodes
+        )
+
+        node_to_index = {
+            node["id"]: index
+            for index, node in enumerate(nodes)
+        }
+
+        edge_index = []
+
+        for edge in edges:
+
+            source = node_to_index[
+                edge["source"]
+            ]
+
+            target = node_to_index[
+                edge["target"]
+            ]
+
+            edge_index.append([
+                source,
+                target
+            ])
+
+        edge_index = torch.tensor(
+            edge_index,
+            dtype=torch.long
+        ).t().contiguous()
+
+        graph = Data(
+            x=x,
+            edge_index=edge_index
+        )
+
+        with torch.no_grad():
+
+            embeddings = self.model(
+                graph.x,
+                graph.edge_index
+            )
+
+            predictions = (
+                self.prediction_layer(
+                    embeddings
+                )
+                .squeeze()
+            )
+
+        results = []
+
+        for index, node in enumerate(nodes):
+
+            if node["type"] == "food":
+
+                results.append({
+                    "food": node["name"],
+                    "score": float(
+                        predictions[index]
+                    )
+                })
+
+        results.sort(
+            key=lambda item: item["score"],
+            reverse=True
+        )
+
+        return results[:top_k]
+
+
+# ============================================================
+# TEST
+# ============================================================
+
+if __name__ == "__main__":
+
+    predictor = NutriTwinGNNPredictor()
+
+    results = predictor.predict(
+        age=22,
+        weight=65,
+        height=170,
+        steps=10500,
+        heart_rate=76,
+        sleep_hours=7.5,
+        active_calories=550,
+        top_k=5
+    )
+
+    print("=" * 60)
+    print("NutriTwinNet GNN Predictor")
+    print("=" * 60)
+
+    for rank, result in enumerate(
+        results,
+        start=1
+    ):
+
+        print(
+            f"{rank}. "
+            f"{result['food']} "
+            f"→ {result['score']:.4f}"
+        )
+
+    print("=" * 60)
+    print("GNN inference completed successfully.")
+    print("=" * 60)

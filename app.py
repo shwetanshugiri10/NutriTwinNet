@@ -1,0 +1,1336 @@
+import streamlit as st
+import pandas as pd
+import plotly.express as px
+
+from recommendation.recommender import recommend_foods
+from gnn.gnn_predictor import NutriTwinGNNPredictor
+from gnn.gnn_explainer import NutriTwinGNNExplainer
+from xai_explainer import NutriTwinXAI
+from hybrid.hybrid_predictor import NutriTwinHybridPredictor
+from wearable.wearable_analyzer import NutriTwinWearableAnalyzer
+
+# ============================================================
+# PAGE CONFIGURATION
+# ============================================================
+
+st.set_page_config(
+    page_title="NutriTwinNet",
+    page_icon="🥗",
+    layout="wide"
+)
+
+# ============================================================
+# TITLE
+# ============================================================
+
+st.title("🥗 NutriTwinNet")
+
+st.subheader(
+    "Digital Twin Enabled Personalized Nutrition Recommendation System"
+)
+
+st.write(
+    "AI-powered personalized nutrition using user profile, "
+    "wearable analytics and digital twin technology."
+)
+
+st.divider()
+
+# ============================================================
+# USER PROFILE
+# ============================================================
+
+st.header("👤 User Profile")
+
+col1, col2 = st.columns(2)
+
+with col1:
+    name = st.text_input("Enter your name", value="User")
+
+    age = st.number_input(
+        "Age",
+        min_value=1,
+        max_value=100,
+        value=22
+    )
+
+    weight = st.number_input(
+        "Weight (kg)",
+        min_value=20.0,
+        max_value=200.0,
+        value=65.0
+    )
+
+with col2:
+    height = st.number_input(
+        "Height (cm)",
+        min_value=100.0,
+        max_value=220.0,
+        value=170.0
+    )
+
+    gender = st.selectbox(
+        "Gender",
+        ["Male", "Female"]
+    )
+
+    activity = st.selectbox(
+        "Activity Level",
+        [
+            "Sedentary",
+            "Light",
+            "Moderate",
+            "Very Active",
+            "Athlete"
+        ]
+    )
+
+# ============================================================
+# WEARABLE ANALYTICS
+# ============================================================
+
+st.divider()
+
+st.header("⌚ Wearable Analytics")
+
+st.write(
+    "Enter today's wearable measurements to update your Digital Twin."
+)
+
+wear_col1, wear_col2, wear_col3, wear_col4 = st.columns(4)
+
+with wear_col1:
+    steps = st.number_input(
+        "👣 Daily Steps",
+        min_value=0,
+        max_value=50000,
+        value=8000
+    )
+
+with wear_col2:
+    heart_rate = st.number_input(
+        "❤️ Average Heart Rate",
+        min_value=40,
+        max_value=180,
+        value=75
+    )
+
+with wear_col3:
+    sleep_hours = st.number_input(
+        "😴 Sleep Hours",
+        min_value=0.0,
+        max_value=24.0,
+        value=7.5,
+        step=0.5
+    )
+
+with wear_col4:
+    active_calories = st.number_input(
+        "🔥 Active Calories",
+        min_value=0,
+        max_value=5000,
+        value=400
+    )
+
+# ============================================================
+# WEARABLE ANALYSIS
+# ============================================================
+
+if steps >= 10000:
+    activity_state = "🟢 High Activity"
+elif steps >= 7000:
+    activity_state = "🟡 Moderate Activity"
+else:
+    activity_state = "🔴 Low Activity"
+
+if sleep_hours >= 7:
+    sleep_state = "🟢 Good Recovery"
+elif sleep_hours >= 6:
+    sleep_state = "🟡 Moderate Recovery"
+else:
+    sleep_state = "🔴 Low Recovery"
+
+if heart_rate < 60:
+    heart_state = "🟡 Low Resting HR"
+elif heart_rate <= 100:
+    heart_state = "🟢 Normal Range"
+else:
+    heart_state = "🔴 Elevated HR"
+
+# ============================================================
+# BMR CALCULATION
+# ============================================================
+
+if gender == "Male":
+    bmr = (
+        10 * weight
+        + 6.25 * height
+        - 5 * age
+        + 5
+    )
+else:
+    bmr = (
+        10 * weight
+        + 6.25 * height
+        - 5 * age
+        - 161
+    )
+
+# ============================================================
+# ACTIVITY MULTIPLIERS
+# ============================================================
+
+activity_factors = {
+    "Sedentary": 1.20,
+    "Light": 1.375,
+    "Moderate": 1.55,
+    "Very Active": 1.725,
+    "Athlete": 1.90
+}
+
+activity_factor = activity_factors[activity]
+
+# ============================================================
+# TDEE
+# ============================================================
+
+tdee = bmr * activity_factor
+
+# ============================================================
+# DYNAMIC DIGITAL TWIN ENGINE
+# ============================================================
+
+if steps >= 10000:
+    activity_score = 100
+elif steps >= 8000:
+    activity_score = 85
+elif steps >= 6000:
+    activity_score = 70
+elif steps >= 4000:
+    activity_score = 50
+else:
+    activity_score = 30
+
+if sleep_hours >= 8:
+    sleep_score = 100
+elif sleep_hours >= 7:
+    sleep_score = 85
+elif sleep_hours >= 6:
+    sleep_score = 65
+elif sleep_hours >= 5:
+    sleep_score = 45
+else:
+    sleep_score = 25
+
+if 60 <= heart_rate <= 80:
+    heart_score = 100
+elif 50 <= heart_rate < 60 or 80 < heart_rate <= 90:
+    heart_score = 80
+elif 90 < heart_rate <= 100:
+    heart_score = 60
+else:
+    heart_score = 40
+
+if active_calories >= 600:
+    calorie_activity_score = 100
+elif active_calories >= 400:
+    calorie_activity_score = 85
+elif active_calories >= 200:
+    calorie_activity_score = 65
+else:
+    calorie_activity_score = 40
+
+digital_twin_score = (
+    activity_score * 0.30
+    + sleep_score * 0.25
+    + heart_score * 0.20
+    + calorie_activity_score * 0.25
+)
+
+if digital_twin_score >= 85:
+    twin_state = "Excellent"
+    twin_message = (
+        "Your current lifestyle indicators show a strong "
+        "activity and recovery pattern."
+    )
+elif digital_twin_score >= 70:
+    twin_state = "Good"
+    twin_message = (
+        "Your Digital Twin shows generally healthy "
+        "activity and recovery patterns."
+    )
+elif digital_twin_score >= 50:
+    twin_state = "Moderate"
+    twin_message = (
+        "Some lifestyle indicators could be improved."
+    )
+else:
+    twin_state = "Needs Attention"
+    twin_message = (
+        "Your current activity and recovery indicators "
+        "suggest that lifestyle improvements may be useful."
+    )
+
+# ============================================================
+# NUTRITION GOAL
+# ============================================================
+
+st.divider()
+
+st.header("🎯 Nutrition Goal")
+
+goal = st.selectbox(
+    "Select your goal",
+    [
+        "Maintain Weight",
+        "Weight Loss",
+        "Weight Gain"
+    ]
+)
+
+# ============================================================
+# CALORIE TARGET
+# ============================================================
+
+if goal == "Weight Loss":
+    target_calories = tdee - 400
+elif goal == "Weight Gain":
+    target_calories = tdee + 300
+else:
+    target_calories = tdee
+
+# ============================================================
+# WEARABLE CALORIE ADJUSTMENT
+# ============================================================
+
+if active_calories > 500:
+    target_calories += 100
+    wearable_message = (
+        "High activity detected. "
+        "Your calorie target was slightly increased."
+    )
+elif active_calories < 200:
+    target_calories -= 100
+    wearable_message = (
+        "Low activity detected. "
+        "Your calorie target was slightly reduced."
+    )
+else:
+    wearable_message = (
+        "Your activity level is within the expected range."
+    )
+
+target_calories = max(target_calories, 1200)
+
+# ============================================================
+# MACRONUTRIENTS
+# ============================================================
+
+protein = (target_calories * 0.25) / 4
+carbohydrates = (target_calories * 0.45) / 4
+fat = (target_calories * 0.30) / 9
+
+# ============================================================
+# DIGITAL TWIN BUTTON
+# ============================================================
+
+if st.button("🧬 Create / Update My Digital Twin"):
+
+    st.success(
+        f"Digital Twin successfully updated for {name}!"
+    )
+
+    # ========================================================
+    # DIGITAL TWIN PROFILE
+    # ========================================================
+
+    st.divider()
+    st.header("🧬 Digital Twin Profile")
+
+    c1, c2, c3, c4 = st.columns(4)
+
+    c1.metric("Age", f"{age} years")
+    c2.metric("Weight", f"{weight:.1f} kg")
+    c3.metric("Height", f"{height:.0f} cm")
+    c4.metric("Activity", activity)
+
+    # ========================================================
+    # ENERGY REQUIREMENTS
+    # ========================================================
+
+    st.divider()
+    st.header("🔥 Energy Requirements")
+
+    c1, c2, c3 = st.columns(3)
+
+    c1.metric("BMR", f"{bmr:.0f} kcal")
+    c2.metric("TDEE", f"{tdee:.0f} kcal")
+    c3.metric("Active Calories", f"{active_calories} kcal")
+
+    # ========================================================
+    # WEARABLE STATUS
+    # ========================================================
+
+    st.divider()
+    st.header("⌚ Wearable Health State")
+
+    c1, c2, c3, c4 = st.columns(4)
+
+    c1.metric("Daily Steps", f"{steps:,}")
+    c2.metric("Heart Rate", f"{heart_rate} bpm")
+    c3.metric("Sleep", f"{sleep_hours:.1f} hrs")
+    c4.metric("Activity", activity_state)
+
+    st.divider()
+
+    c1, c2 = st.columns(2)
+
+    with c1:
+        st.subheader("😴 Recovery Status")
+        st.info(sleep_state)
+
+    with c2:
+        st.subheader("❤️ Heart Rate Status")
+        st.info(heart_state)
+
+    # ========================================================
+    # DIGITAL TWIN INTELLIGENCE
+    # ========================================================
+
+    st.divider()
+    st.header("🧬 Digital Twin Intelligence")
+
+    dt1, dt2, dt3, dt4 = st.columns(4)
+
+    dt1.metric("Digital Twin Score", f"{digital_twin_score:.0f}/100")
+    dt2.metric("Activity Score", f"{activity_score}/100")
+    dt3.metric("Sleep Score", f"{sleep_score}/100")
+    dt4.metric("Heart Score", f"{heart_score}/100")
+
+    if twin_state == "Excellent":
+        st.success(
+            f"🟢 State: **{twin_state}** — {twin_message}"
+        )
+    elif twin_state == "Good":
+        st.info(
+            f"🟡 State: **{twin_state}** — {twin_message}"
+        )
+    elif twin_state == "Moderate":
+        st.warning(
+            f"🟠 State: **{twin_state}** — {twin_message}"
+        )
+    else:
+        st.error(
+            f"🔴 State: **{twin_state}** — {twin_message}"
+        )
+
+    twin_data = pd.DataFrame({
+        "Component": [
+            "Activity",
+            "Sleep",
+            "Heart Rate",
+            "Active Calories"
+        ],
+        "Score": [
+            activity_score,
+            sleep_score,
+            heart_score,
+            calorie_activity_score
+        ]
+    })
+
+    twin_chart = px.bar(
+        twin_data,
+        x="Component",
+        y="Score",
+        title="Digital Twin State Components",
+        text="Score"
+    )
+
+    twin_chart.update_traces(
+        texttemplate="%{text}/100",
+        textposition="outside"
+    )
+
+    twin_chart.update_yaxes(range=[0, 100])
+
+    st.plotly_chart(
+        twin_chart,
+        use_container_width=True
+    )
+
+    # ========================================================
+    # NUTRITION TARGETS
+    # ========================================================
+
+    st.divider()
+    st.header("🍎 Personalized Nutrition Targets")
+
+    c1, c2, c3, c4 = st.columns(4)
+
+    c1.metric("Daily Calories", f"{target_calories:.0f} kcal")
+    c2.metric("Protein", f"{protein:.0f} g")
+    c3.metric("Carbohydrates", f"{carbohydrates:.0f} g")
+    c4.metric("Fat", f"{fat:.0f} g")
+
+    st.info(wearable_message)
+
+    # ========================================================
+    # DIGITAL TWIN ANALYSIS
+    # ========================================================
+
+    st.divider()
+    st.header("🔍 Digital Twin Analysis")
+
+    st.write(
+        f"""
+        **User:** {name}
+
+        **Activity State:** {activity_state}
+
+        **Sleep State:** {sleep_state}
+
+        **Heart Rate State:** {heart_state}
+
+        **Daily Steps:** {steps:,}
+
+        **Sleep:** {sleep_hours:.1f} hours
+
+        **Active Calories:** {active_calories} kcal
+
+        **BMR:** {bmr:.0f} kcal/day
+
+        **TDEE:** {tdee:.0f} kcal/day
+
+        **Nutrition Goal:** {goal}
+
+        **Recommended Calories:** {target_calories:.0f} kcal/day
+
+        **Protein Target:** {protein:.0f} g/day
+        """
+    )
+
+    st.success(
+        "🧬 Digital Twin successfully synchronized "
+        "with wearable analytics."
+    )
+
+# ============================================================
+# NUTRITION VISUALIZATION
+# ============================================================
+
+st.divider()
+st.header("📊 Nutrition Dashboard")
+
+macro_data = pd.DataFrame({
+    "Nutrient": [
+        "Protein",
+        "Carbohydrates",
+        "Fat"
+    ],
+    "Grams": [
+        protein,
+        carbohydrates,
+        fat
+    ]
+})
+
+macro_chart = px.bar(
+    macro_data,
+    x="Nutrient",
+    y="Grams",
+    title="Daily Macronutrient Targets",
+    text="Grams"
+)
+
+macro_chart.update_traces(
+    texttemplate="%{text:.0f} g",
+    textposition="outside"
+)
+
+st.plotly_chart(
+    macro_chart,
+    use_container_width=True
+)
+
+calorie_data = pd.DataFrame({
+    "Metric": [
+        "BMR",
+        "TDEE",
+        "Target Calories"
+    ],
+    "Calories": [
+        bmr,
+        tdee,
+        target_calories
+    ]
+})
+
+calorie_chart = px.bar(
+    calorie_data,
+    x="Metric",
+    y="Calories",
+    title="Daily Calorie Analysis",
+    text="Calories"
+)
+
+calorie_chart.update_traces(
+    texttemplate="%{text:.0f} kcal",
+    textposition="outside"
+)
+
+st.plotly_chart(
+    calorie_chart,
+    use_container_width=True
+)
+
+# ============================================================
+# FOOD RECOMMENDATION
+# ============================================================
+
+st.divider()
+st.header("🍎 Personalized Food Recommendations")
+
+st.write(
+    "NutriTwinNet ranks foods according to your "
+    "nutrition goal, protein requirements and nutrient density."
+)
+
+recommendations = recommend_foods(
+    calories=target_calories,
+    protein=protein,
+    goal=goal
+)
+
+st.dataframe(
+    recommendations[
+        [
+            "food",
+            "category",
+            "calories",
+            "protein",
+            "carbs",
+            "fat",
+            "fiber"
+        ]
+    ],
+    use_container_width=True,
+    hide_index=True
+)
+
+st.subheader("⭐ Top Recommendation")
+
+top_food = recommendations.iloc[0]
+
+st.success(
+    f"""
+    **{top_food['food']}**
+
+    Category: {top_food['category']}
+
+    Calories: {top_food['calories']} kcal
+
+    Protein: {top_food['protein']} g
+
+    Carbohydrates: {top_food['carbs']} g
+
+    Fat: {top_food['fat']} g
+
+    Fiber: {top_food['fiber']} g
+    """
+)
+
+if goal == "Weight Loss":
+    st.info(
+        "Recommendation logic prioritizes protein, "
+        "fiber and relatively lower-calorie foods."
+    )
+elif goal == "Weight Gain":
+    st.info(
+        "Recommendation logic gives additional weight "
+        "to energy-dense and protein-rich foods."
+    )
+else:
+    st.info(
+        "Recommendation logic prioritizes balanced "
+        "nutritional value."
+    )
+
+# ============================================================
+# WEARABLE ANALYTICS
+# ============================================================
+
+st.divider()
+
+st.header("⌚ Wearable Analytics")
+
+st.write(
+    "Wearable measurements are analyzed to generate "
+    "personalized activity and lifestyle features for "
+    "the NutriTwinNet Digital Twin."
+)
+
+try:
+
+    wearable_analyzer = NutriTwinWearableAnalyzer()
+
+    wearable_result = wearable_analyzer.analyze(
+
+        steps=int(steps),
+
+        heart_rate=int(heart_rate),
+
+        sleep_hours=float(sleep_hours),
+
+        active_calories=int(active_calories)
+
+    )
+
+    # --------------------------------------------------------
+    # Wearable metrics
+    # --------------------------------------------------------
+
+    col1, col2, col3, col4 = st.columns(4)
+
+    col1.metric(
+        "Steps",
+        f"{wearable_result['steps']['value']:.0f}",
+        wearable_result['steps']['status']
+    )
+
+    col2.metric(
+        "Heart Rate",
+        f"{wearable_result['heart_rate']['value']:.0f} bpm",
+        wearable_result['heart_rate']['status']
+    )
+
+    col3.metric(
+        "Sleep",
+        f"{wearable_result['sleep_hours']['value']:.1f} hrs",
+        wearable_result['sleep_hours']['status']
+    )
+
+    col4.metric(
+        "Active Calories",
+        f"{wearable_result['active_calories']['value']:.0f} kcal",
+        wearable_result['active_calories']['status']
+    )
+
+    # --------------------------------------------------------
+    # Overall wearable score
+    # --------------------------------------------------------
+
+    overall_score = (
+        wearable_result["overall_score"]
+    )
+
+    st.progress(
+        min(
+            max(overall_score, 0.0),
+            1.0
+        )
+    )
+
+    st.success(
+        f"⌚ Overall Wearable Score: "
+        f"**{overall_score * 100:.1f}%**"
+    )
+
+    st.caption(
+        "Wearable scores are prototype analytics features "
+        "used by the NutriTwinNet AI pipeline and are not "
+        "medical or clinical assessments."
+    )
+
+except Exception as e:
+
+    st.warning(
+        "Wearable analytics could not be generated."
+    )
+
+    st.exception(e)
+
+# ============================================================
+# GNN PERSONALIZED RECOMMENDATION
+# ============================================================
+
+st.divider()
+st.header("🧠 GNN Personalized Food Recommendations")
+
+st.write(
+    "The trained Graph Neural Network analyzes your Digital Twin, "
+    "wearable measurements and food-nutrient relationships to "
+    "produce a second-layer food ranking."
+)
+
+
+# ============================================================
+# GNN MULTI-GOAL PERSONALIZED RECOMMENDATION
+# ============================================================
+
+try:
+
+    # Load the GNN trained specifically for the
+    # currently selected nutrition goal.
+    gnn_predictor = NutriTwinGNNPredictor(
+        goal=goal
+    )
+
+    gnn_results = gnn_predictor.predict(
+
+        age=int(age),
+
+        weight=float(weight),
+
+        height=float(height),
+
+        steps=int(steps),
+
+        heart_rate=int(heart_rate),
+
+        sleep_hours=float(sleep_hours),
+
+        active_calories=int(active_calories),
+
+        top_k=5
+
+    )
+
+    # --------------------------------------------------------
+    # Create recommendation table
+    # --------------------------------------------------------
+
+    gnn_data = pd.DataFrame(
+        gnn_results
+    )
+
+    gnn_data.insert(
+        0,
+        "Rank",
+        range(
+            1,
+            len(gnn_data) + 1
+        )
+    )
+
+    gnn_data["score"] = (
+        gnn_data["score"]
+        .round(4)
+    )
+
+    # --------------------------------------------------------
+    # Display results
+    # --------------------------------------------------------
+
+    st.dataframe(
+
+        gnn_data.rename(
+            columns={
+                "food": "Food",
+                "score": "GNN Score"
+            }
+        ),
+
+        use_container_width=True,
+
+        hide_index=True
+
+    )
+
+    # --------------------------------------------------------
+    # Top recommendation
+    # --------------------------------------------------------
+
+    if len(gnn_results) > 0:
+
+        best_gnn_food = gnn_results[0]
+
+        st.success(
+
+            f"🧠 GNN Top Recommendation: "
+            f"**{best_gnn_food['food']}** "
+            f"(score: "
+            f"{best_gnn_food['score']:.4f})"
+
+        )
+    # ========================================================
+    # EXPLAINABLE AI
+    # ========================================================
+
+    if len(gnn_results) > 0:
+
+        st.subheader("🔍 Why was this food recommended?")
+
+        best_food = gnn_results[0]
+
+        xai = NutriTwinXAI()
+
+        explanation = xai.explain_food(
+            food_name=best_food["food"],
+            score=best_food["score"],
+            goal=goal,
+            age=int(age),
+            weight=float(weight),
+            height=float(height),
+            steps=int(steps),
+            heart_rate=int(heart_rate),
+            sleep_hours=float(sleep_hours),
+            active_calories=int(active_calories)
+        )
+
+        st.write(
+            f"### 🥗 {explanation['food']}"
+        )
+
+        st.write(
+            f"**GNN Score:** "
+            f"{explanation['score']:.4f}"
+        )
+
+        st.write(
+            f"**Objective:** "
+            f"{explanation['goal']}"
+        )
+
+        st.markdown("#### 📊 Nutritional Factors")
+
+        nutrition = explanation["nutrition"]
+
+        col1, col2, col3, col4, col5 = st.columns(5)
+
+        col1.metric(
+            "Calories",
+            f"{nutrition['calories']:.0f} kcal"
+        )
+
+        col2.metric(
+            "Protein",
+            f"{nutrition['protein']:.1f} g"
+        )
+
+        col3.metric(
+            "Carbs",
+            f"{nutrition['carbs']:.1f} g"
+        )
+
+        col4.metric(
+            "Fat",
+            f"{nutrition['fat']:.1f} g"
+        )
+
+        col5.metric(
+            "Fiber",
+            f"{nutrition['fiber']:.1f} g"
+        )
+
+        st.markdown("#### 💡 Recommendation Factors")
+
+        for reason in explanation["reasons"]:
+
+            st.write(
+                f"🟢 {reason}"
+            )
+
+        if explanation["personalized_context"]:
+
+            st.markdown(
+                "#### 👤 Personalized Context"
+            )
+
+            for context in explanation[
+                "personalized_context"
+            ]:
+
+                st.write(
+                    f"🔵 {context}"
+                )
+
+    # --------------------------------------------------------
+    # Goal information
+    # --------------------------------------------------------
+
+    st.caption(
+
+        f"GNN model used: **{goal}**. "
+        "Scores are model outputs and are not "
+        "medical or clinical recommendations."
+
+    )
+
+except Exception as e:
+
+    st.error(
+        "GNN recommendation module could not be loaded."
+    )
+
+    st.exception(e)
+
+# ============================================================
+# REAL GNN GRAPH EXPLANATION
+# ============================================================
+
+st.divider()
+
+st.header("🔬 GNN Graph Explanation")
+
+st.write(
+    "GNNExplainer identifies the most influential "
+    "food-nutrient features and graph relationships "
+    "behind the selected GNN recommendation."
+)
+
+try:
+
+    if len(gnn_results) > 0:
+
+        best_food = gnn_results[0]["food"]
+
+        gnn_explainer = NutriTwinGNNExplainer(
+            goal=goal
+        )
+
+        graph_explanation = gnn_explainer.explain(
+
+            age=int(age),
+
+            weight=float(weight),
+
+            height=float(height),
+
+            steps=int(steps),
+
+            heart_rate=int(heart_rate),
+
+            sleep_hours=float(sleep_hours),
+
+            active_calories=int(active_calories),
+
+            food_name=best_food
+        )
+
+        # ----------------------------------------------------
+        # Explanation summary
+        # ----------------------------------------------------
+
+        st.success(
+            f"🔬 Explained food: "
+            f"**{graph_explanation['food']}**"
+        )
+
+        st.write(
+            f"**GNN Prediction:** "
+            f"{graph_explanation['prediction']:.4f}"
+        )
+
+        st.write(
+            f"**Goal:** "
+            f"{graph_explanation['goal']}"
+        )
+
+        # ----------------------------------------------------
+        # Feature importance
+        # ----------------------------------------------------
+
+        st.subheader(
+            "📊 Feature Importance"
+        )
+
+        feature_data = pd.DataFrame(
+            graph_explanation[
+                "feature_importance"
+            ]
+        )
+
+        feature_data["importance"] = (
+            feature_data["importance"]
+            .round(4)
+        )
+
+        st.dataframe(
+            feature_data.rename(
+                columns={
+                    "feature": "Feature",
+                    "importance": "Importance"
+                }
+            ),
+            use_container_width=True,
+            hide_index=True
+        )
+
+        # ----------------------------------------------------
+        # Feature importance chart
+        # ----------------------------------------------------
+
+        fig_features = px.bar(
+            feature_data,
+            x="importance",
+            y="feature",
+            orientation="h",
+            title="GNN Feature Importance"
+        )
+
+        fig_features.update_layout(
+            xaxis_title="Importance",
+            yaxis_title="Feature"
+        )
+
+        st.plotly_chart(
+            fig_features,
+            use_container_width=True
+        )
+
+        # ----------------------------------------------------
+        # Important graph relationships
+        # ----------------------------------------------------
+
+        st.subheader(
+            "🔗 Important Graph Relationships"
+        )
+
+        important_edges = graph_explanation[
+            "important_edges"
+        ]
+
+        if len(important_edges) > 0:
+
+            edge_data = pd.DataFrame(
+                important_edges
+            )
+
+            edge_data["importance"] = (
+                edge_data["importance"]
+                .round(4)
+            )
+
+            st.dataframe(
+                edge_data[
+                    [
+                        "source",
+                        "target",
+                        "importance"
+                    ]
+                ].rename(
+                    columns={
+                        "source": "Source",
+                        "target": "Target",
+                        "importance": "Importance"
+                    }
+                ),
+                use_container_width=True,
+                hide_index=True
+            )
+
+        else:
+
+            st.info(
+                "No significant graph relationships "
+                "were identified for this prediction."
+            )
+
+        # ----------------------------------------------------
+        # Graph statistics
+        # ----------------------------------------------------
+
+        st.caption(
+            f"Graph analyzed: "
+            f"{graph_explanation['total_nodes']} nodes "
+            f"and "
+            f"{graph_explanation['total_edges']} edges."
+        )
+
+        st.caption(
+            "GNNExplainer provides model-level feature "
+            "and graph-relationship importance. "
+            "These explanations are experimental and "
+            "are not medical or clinical advice."
+        )
+
+except Exception as e:
+
+    st.warning(
+        "GNN graph explanation could not be generated."
+    )
+
+    st.exception(e)
+
+# ============================================================
+# GNN + RL HYBRID RECOMMENDATION
+# ============================================================
+
+st.divider()
+
+st.header("🤖 GNN + RL Hybrid Recommendation")
+
+st.write(
+    "The hybrid recommendation system combines the "
+    "Graph Neural Network food ranking with the "
+    "Reinforcement Learning policy to produce a "
+    "final personalized recommendation."
+)
+
+try:
+
+    hybrid_predictor = NutriTwinHybridPredictor(
+        goal=goal,
+        gnn_weight=0.6,
+        rl_weight=0.4
+    )
+
+    hybrid_results = hybrid_predictor.predict(
+
+        age=int(age),
+
+        weight=float(weight),
+
+        height=float(height),
+
+        steps=int(steps),
+
+        heart_rate=int(heart_rate),
+
+        sleep_hours=float(sleep_hours),
+
+        active_calories=int(active_calories),
+
+        top_k=5
+
+    )
+
+    # --------------------------------------------------------
+    # Hybrid recommendation table
+    # --------------------------------------------------------
+
+    if len(hybrid_results) > 0:
+
+        hybrid_data = pd.DataFrame(
+            hybrid_results
+        )
+
+        hybrid_data.insert(
+            0,
+            "Rank",
+            range(
+                1,
+                len(hybrid_data) + 1
+            )
+        )
+
+        hybrid_data["gnn_score"] = (
+            hybrid_data["gnn_score"]
+            .round(4)
+        )
+
+        hybrid_data["rl_q_value"] = (
+            hybrid_data["rl_q_value"]
+            .round(4)
+        )
+
+        hybrid_data["hybrid_score"] = (
+            hybrid_data["hybrid_score"]
+            .round(4)
+        )
+
+        st.dataframe(
+
+            hybrid_data[
+                [
+                    "Rank",
+                    "food",
+                    "gnn_score",
+                    "rl_q_value",
+                    "hybrid_score"
+                ]
+            ].rename(
+
+                columns={
+
+                    "food": "Food",
+
+                    "gnn_score":
+                        "GNN Score",
+
+                    "rl_q_value":
+                        "RL Q-Value",
+
+                    "hybrid_score":
+                        "Hybrid Score"
+                }
+
+            ),
+
+            use_container_width=True,
+
+            hide_index=True
+        )
+
+        # ----------------------------------------------------
+        # Top hybrid recommendation
+        # ----------------------------------------------------
+
+        best_hybrid = hybrid_results[0]
+
+        st.success(
+
+            f"🤖 Hybrid AI Recommendation: "
+            f"**{best_hybrid['food']}** "
+            f"(Hybrid Score: "
+            f"{best_hybrid['hybrid_score']:.4f})"
+
+        )
+
+        # ----------------------------------------------------
+        # Model contribution
+        # ----------------------------------------------------
+
+        col1, col2 = st.columns(2)
+
+        col1.metric(
+            "GNN Contribution",
+            "60%"
+        )
+
+        col2.metric(
+            "RL Contribution",
+            "40%"
+        )
+
+        st.caption(
+
+            f"Hybrid formula: "
+            f"60% normalized GNN score + "
+            f"40% normalized RL Q-value. "
+            f"Selected objective: **{goal}**."
+
+        )
+
+        st.caption(
+            "Hybrid scores are model outputs from an "
+            "educational AI prototype and are not "
+            "medical or clinical recommendations."
+        )
+
+    else:
+
+        st.info(
+            "No hybrid recommendations were generated."
+        )
+
+except Exception as e:
+
+    st.warning(
+        "Hybrid GNN + RL recommendation "
+        "could not be generated."
+    )
+
+    st.exception(e)
+
+# ============================================================
+# FOOTER
+# ============================================================
+
+st.divider()
+
+st.caption(
+    "NutriTwinNet V1 — Educational AI prototype. "
+    "Wearable values in this version are manually entered/simulated."
+)

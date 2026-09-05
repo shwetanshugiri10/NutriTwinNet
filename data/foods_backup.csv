@@ -1,0 +1,21 @@
+food,category,calories,protein,carbs,fat,fiber
+Oatmeal,Breakfast,150,5.0,27.0,3.0,4.0
+Banana,Fruit,105,1.0,27.0,0.0,3.0
+Greek Yogurt,Dairy,100,10.0,6.0,0.0,0.0
+Eggs,Protein,78,6.0,1.0,5.0,0.0
+Chicken Breast,Protein,165,31.0,0.0,3.6,0.0
+Brown Rice,Grain,216,5.0,45.0,1.8,4.0
+Dal,Legume,180,9.0,30.0,4.0,8.0
+Paneer,Protein,265,18.0,6.0,20.0,0.0
+Apple,Fruit,95,0.5,25.0,0.3,4.0
+Almonds,Nuts,164,6.0,6.0,14.0,3.5
+Salad,Vegetable,80,3.0,12.0,2.0,4.0
+Roti,Grain,120,3.0,18.0,3.0,2.0
+Fish,Protein,206,22.0,0.0,12.0,0.0
+Milk,Dairy,122,8.0,12.0,5.0,0.0
+Sweet Potato,Vegetable,103,2.0,24.0,0.2,4.0
+Chickpeas,Legume,164,9.0,27.0,2.6,7.6
+Tofu,Protein,76,8.0,1.9,4.8,0.3
+Broccoli,Vegetable,55,3.7,11.0,0.6,5.1
+Carrot,Vegetable,41,0.9,10.0,0.2,2.8
+Quinoa,Grain,222,8.0,39.0,3.6,5.0
